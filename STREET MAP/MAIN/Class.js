@@ -102,49 +102,11 @@ class ShapeManager {
   }
 
   createCircle(lat, lng, radius, options) {
-    const circle = L.circle([lat, lng], { ...options, radius }).addTo(this.map);
-    const centerMarker = L.marker([lat, lng], { draggable: true }).addTo(
-      this.map
-    );
-
-    centerMarker.on("dragend", () =>
-      this.onCircleDragEnd(circle, centerMarker)
-    );
-    return circle;
-  }
-
-  onCircleDragEnd(circle, marker) {
-    const newLatLng = marker.getLatLng();
-    circle.setLatLng(newLatLng);
-    const shape = this.shapes.find((s) => s.obj === circle);
-    if (shape) {
-      shape.lat = newLatLng.lat;
-      shape.lng = newLatLng.lng;
-    }
+    return L.circle([lat, lng], { ...options, radius }).addTo(this.map);
   }
 
   createPolygon(type, coords, options) {
-    const polygon = L.polygon(coords, options).addTo(this.map);
-    const markers = coords.map((coord) => {
-      const marker = L.marker(coord, { draggable: true }).addTo(this.map);
-      marker.on("dragend", () => this.onDragEnd(polygon, markers));
-      return marker;
-    });
-    this.shapes.push({ type, coords, obj: polygon, markers });
-    return polygon;
-  }
-
-  onDragEnd(polygon, markers) {
-    const newCoords = markers.map((marker) => marker.getLatLng());
-    polygon.setLatLngs(newCoords);
-
-    const bounds = L.latLngBounds(newCoords);
-    this.map.fitBounds(bounds);
-
-    const shape = this.shapes.find((s) => s.obj === polygon);
-    if (shape) {
-      shape.coords = newCoords;
-    }
+    return L.polygon(coords, options).addTo(this.map);
   }
 
   calculateZoomLevel(radius) {
@@ -189,10 +151,18 @@ class ShapeManager {
           prompt("Enter new radius in meters:", shape.obj.getRadius())
         );
         if (!isNaN(newRadius)) {
-          shape.obj.setRadius(newRadius);
-          shape.obj.setLatLng([lat, lng]); // Update circle's center
-          shape.lat = lat; // Update the center of the circle
-          shape.lng = lng;
+          shape.obj.setRadius(newRadius); // Update radius
+          shape.obj.setLatLng([lat, lng]); // Ensure the circle center is correct
+          shape.lat = lat; // Update circle's center latitude
+          shape.lng = lng; // Update circle's center longitude
+
+          // Recalculate the zoom level based on new radius
+          const zoomLevel = this.calculateZoomLevel(newRadius);
+
+          // Fly to the updated circle's location with the new zoom level
+          this.map.flyTo([lat, lng], zoomLevel);
+
+          // Update the popup with the new radius
           shape.obj
             .bindPopup(
               this.getPopupContent(type, shape.lat, shape.lng, newRadius)
@@ -201,11 +171,7 @@ class ShapeManager {
         }
       } else {
         const bounds = L.latLngBounds(shape.coords);
-        this.map.fitBounds(bounds);
-        shape.markers.forEach((marker) => {
-          marker.dragging.enable();
-          marker.on("dragend", () => this.onDragEnd(shape.obj, shape.markers));
-        });
+        this.map.fitBounds(bounds); // Adjust the map view to fit the polygon
 
         // Update the coordinates dynamically and bind the popup again
         shape.obj.setLatLngs(shape.coords);
@@ -218,37 +184,10 @@ class ShapeManager {
     }
   }
 
-  // onDragEnd(polygon, markers) {
-  //   const newCoords = markers.map((marker) => marker.getLatLng());
-  //   polygon.setLatLngs(newCoords);
-
-  //   // Dynamically update the polygon bounds
-  //   const bounds = L.latLngBounds(newCoords);
-  //   this.map.fitBounds(bounds);
-
-  //   // Find the shape and update coordinates
-  //   const shape = this.shapes.find((s) => s.obj === polygon);
-  //   if (shape) {
-  //     shape.coords = newCoords;
-
-  //     // Calculate the new center (lat, lng) for the popup
-  //     const center = polygon.getBounds().getCenter();
-  //     shape.lat = center.lat;
-  //     shape.lng = center.lng;
-
-  //     // Rebind the popup with updated coordinates
-  //     polygon
-  //       .bindPopup(this.getPopupContent(shape.type, shape.lat, shape.lng, newCoords))
-  //       .openPopup();
-  //   }
-  // }
-
   removeShape(type, lat, lng) {
     this.shapes = this.shapes.filter((shape) => {
       if (shape.type === type && shape.lat === lat && shape.lng === lng) {
         this.map.removeLayer(shape.obj);
-        if (shape.markers)
-          shape.markers.forEach((m) => this.map.removeLayer(m));
         return false;
       }
       return true;
