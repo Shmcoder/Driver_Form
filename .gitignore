@@ -8,8 +8,8 @@ yarn-debug.log*
 yarn-error.log*
 
 # Environment Variables
-BACKEND/CONFIG/.env
-FRONTEND/CONFIG/Proxy_url.js
+**/CONFIG/.env
+**/CONFIG/Proxy_url.js
 # Node modules
 **/node_modules/
 
