@@ -157,54 +157,67 @@ class ShapeManager {
   getPopupContent(type, lat, lng, sizeOrCoords) {
     if (type === "circle") {
       return `
-        <b>CIRCLE INFO</b><br>
-        RADIUS: ${sizeOrCoords}m<br>
+        <b>Circle Information</b><br>
+        <b>Radius:</b> ${sizeOrCoords} m<br>
+        <b>Location:</b> ${lat.toFixed(4)}, ${lng.toFixed(4)}<br>
         <button onclick="shapeManager.editShape('${type}', ${lat}, ${lng})">Edit</button>
         <button onclick="shapeManager.removeShape('${type}', ${lat}, ${lng})">Remove</button>
       `;
     } else {
+      const shapeType = type.charAt(0).toUpperCase() + type.slice(1); // Capitalize the first letter
+      const coordinatesStr = sizeOrCoords
+        .map((coord) => `${coord[0].toFixed(4)}, ${coord[1].toFixed(4)}`)
+        .join("<br>"); // Dynamically show the coordinates
+
       return `
-        <b>${type.toUpperCase()} INFO</b><br>
+        <b>${shapeType} Information</b><br>
+        <b>Coordinates:</b><br>
+        ${coordinatesStr}<br>
         <button onclick="shapeManager.removeShape('${type}', ${lat}, ${lng})">Remove</button>
       `;
     }
   }
 
   editShape(type, lat, lng) {
-    const shape = this.shapes.find(
-      (s) => s.type === type && s.lat === lat && s.lng === lng
-    );
-  
-    if (shape) {
-      if (type === "circle") {
-        const newRadius = parseFloat(
-          prompt("Enter new radius in meters:", shape.obj.getRadius())
-        );
-        if (!isNaN(newRadius)) {
-          shape.obj.setRadius(newRadius); // Update the circle's radius
-  
-          // Recalculate the zoom level based on the new radius
-          const zoomLevel = this.calculateZoomLevel(newRadius);
-          this.map.flyTo([lat, lng], zoomLevel); // Fly to the circle's new position with the updated zoom
-  
-          // Update the popup content with the new radius
-          shape.obj
-            .bindPopup(
-              this.getPopupContent(type, shape.lat, shape.lng, newRadius)
-            )
-            .openPopup();
-        }
-      } else {
-        const bounds = L.latLngBounds(shape.coords);
-        this.map.fitBounds(bounds);
-        shape.markers.forEach((marker) => {
-          marker.dragging.enable();
-          marker.on("dragend", () => this.onDragEnd(shape.obj, shape.markers));
-        });
+  const shape = this.shapes.find(
+    (s) => s.type === type && s.lat === lat && s.lng === lng
+  );
+
+  if (shape) {
+    if (type === "circle") {
+      const newRadius = parseFloat(
+        prompt("Enter new radius in meters:", shape.obj.getRadius())
+      );
+      if (!isNaN(newRadius)) {
+        shape.obj.setRadius(newRadius);
+        shape.obj.setLatLng([lat, lng]);  // Update circle's center
+        shape.lat = lat;  // Update the center of the circle
+        shape.lng = lng;
+        shape.obj
+          .bindPopup(
+            this.getPopupContent(type, shape.lat, shape.lng, newRadius)
+          )
+          .openPopup();
       }
+    } else {
+      const bounds = L.latLngBounds(shape.coords);
+      this.map.fitBounds(bounds);
+      shape.markers.forEach((marker) => {
+        marker.dragging.enable();
+        marker.on("dragend", () => this.onDragEnd(shape.obj, shape.markers));
+      });
+
+      // Update the coordinates dynamically and bind the popup again
+      shape.obj.setLatLngs(shape.coords);
+      shape.obj
+        .bindPopup(
+          this.getPopupContent(type, shape.lat, shape.lng, shape.coords)
+        )
+        .openPopup();
     }
   }
-  
+}
+
 
   removeShape(type, lat, lng) {
     this.shapes = this.shapes.filter((shape) => {
