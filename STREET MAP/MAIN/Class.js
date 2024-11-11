@@ -179,45 +179,69 @@ class ShapeManager {
   }
 
   editShape(type, lat, lng) {
-  const shape = this.shapes.find(
-    (s) => s.type === type && s.lat === lat && s.lng === lng
-  );
+    const shape = this.shapes.find(
+      (s) => s.type === type && s.lat === lat && s.lng === lng
+    );
 
-  if (shape) {
-    if (type === "circle") {
-      const newRadius = parseFloat(
-        prompt("Enter new radius in meters:", shape.obj.getRadius())
-      );
-      if (!isNaN(newRadius)) {
-        shape.obj.setRadius(newRadius);
-        shape.obj.setLatLng([lat, lng]);  // Update circle's center
-        shape.lat = lat;  // Update the center of the circle
-        shape.lng = lng;
+    if (shape) {
+      if (type === "circle") {
+        const newRadius = parseFloat(
+          prompt("Enter new radius in meters:", shape.obj.getRadius())
+        );
+        if (!isNaN(newRadius)) {
+          shape.obj.setRadius(newRadius);
+          shape.obj.setLatLng([lat, lng]); // Update circle's center
+          shape.lat = lat; // Update the center of the circle
+          shape.lng = lng;
+          shape.obj
+            .bindPopup(
+              this.getPopupContent(type, shape.lat, shape.lng, newRadius)
+            )
+            .openPopup();
+        }
+      } else {
+        const bounds = L.latLngBounds(shape.coords);
+        this.map.fitBounds(bounds);
+        shape.markers.forEach((marker) => {
+          marker.dragging.enable();
+          marker.on("dragend", () => this.onDragEnd(shape.obj, shape.markers));
+        });
+
+        // Update the coordinates dynamically and bind the popup again
+        shape.obj.setLatLngs(shape.coords);
         shape.obj
           .bindPopup(
-            this.getPopupContent(type, shape.lat, shape.lng, newRadius)
+            this.getPopupContent(type, shape.lat, shape.lng, shape.coords)
           )
           .openPopup();
       }
-    } else {
-      const bounds = L.latLngBounds(shape.coords);
-      this.map.fitBounds(bounds);
-      shape.markers.forEach((marker) => {
-        marker.dragging.enable();
-        marker.on("dragend", () => this.onDragEnd(shape.obj, shape.markers));
-      });
-
-      // Update the coordinates dynamically and bind the popup again
-      shape.obj.setLatLngs(shape.coords);
-      shape.obj
-        .bindPopup(
-          this.getPopupContent(type, shape.lat, shape.lng, shape.coords)
-        )
-        .openPopup();
     }
   }
-}
 
+  // onDragEnd(polygon, markers) {
+  //   const newCoords = markers.map((marker) => marker.getLatLng());
+  //   polygon.setLatLngs(newCoords);
+
+  //   // Dynamically update the polygon bounds
+  //   const bounds = L.latLngBounds(newCoords);
+  //   this.map.fitBounds(bounds);
+
+  //   // Find the shape and update coordinates
+  //   const shape = this.shapes.find((s) => s.obj === polygon);
+  //   if (shape) {
+  //     shape.coords = newCoords;
+
+  //     // Calculate the new center (lat, lng) for the popup
+  //     const center = polygon.getBounds().getCenter();
+  //     shape.lat = center.lat;
+  //     shape.lng = center.lng;
+
+  //     // Rebind the popup with updated coordinates
+  //     polygon
+  //       .bindPopup(this.getPopupContent(shape.type, shape.lat, shape.lng, newCoords))
+  //       .openPopup();
+  //   }
+  // }
 
   removeShape(type, lat, lng) {
     this.shapes = this.shapes.filter((shape) => {
