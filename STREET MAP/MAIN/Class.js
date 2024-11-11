@@ -1,250 +1,222 @@
 class ShapeManager {
   constructor(mapContainerId) {
     this.map = L.map(mapContainerId).setView([11.0168, 76.9558], 5);
+    this.shapes = [];
+    this.currentShape = null;
+    this.circleColor = "green";
+    this.triangleColor = "red";
+    this.rectangleColor = "blue";
+    this.coordinates = [];
 
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution:
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(this.map);
 
-    this.shapes = [];
-    this.currentShape = null;
+    this.map.on("click", this.onMapClick.bind(this));
+  }
 
-    // Map click event
-    this.map.on("click", (event) => {
-      if (this.currentShape) {
-        const lat = event.latlng.lat;
-        const lng = event.latlng.lng;
+  onMapClick(event) {
+    if (!this.currentShape) {
+      console.log("No shape selected");
+      return;
+    }
 
-        // Prompt for radius or side length
-        let dimension = prompt(
-          "Enter dimension (radius for circle, side for triangle and rectangle) in meters:",
-          200
+    const { lat, lng } = event.latlng;
+    switch (this.currentShape) {
+      case "circle":
+        this.handleCircleClick(lat, lng);
+        break;
+      case "triangle":
+      case "rectangle":
+        this.handlePolygonClick(
+          lat,
+          lng,
+          this.currentShape === "triangle" ? 3 : 4
         );
-        if (dimension && !isNaN(dimension)) {
-          dimension = parseFloat(dimension);
+        break;
+    }
+  }
 
-          // Draw based on the current shape type
-          if (this.currentShape === "circle") {
-            this.drawCircle(lat, lng, dimension);
-          } else if (this.currentShape === "triangle") {
-            this.drawTriangle(lat, lng, dimension);
-          } else if (this.currentShape === "rectangle") {
-            this.drawRectangle(lat, lng, dimension);
-          }
-        } else {
-          alert("Invalid dimension entered.");
-        }
-      } else {
-        console.log("No shape selected");
+  handleCircleClick(lat, lng) {
+    if (this.coordinates.length === 0) {
+      const radius = this.getDimension();
+      if (radius !== null) {
+        const zoomLevel = this.calculateZoomLevel(radius);
+        this.map.flyTo([lat, lng], zoomLevel);
+        this.drawShape("circle", lat, lng, radius);
       }
-    });
+    }
+  }
+
+  handlePolygonClick(lat, lng, pointsRequired) {
+    this.coordinates.push([lat, lng]);
+
+    if (this.coordinates.length === pointsRequired) {
+      const bounds = L.latLngBounds(this.coordinates);
+      this.map.fitBounds(bounds);
+      this.drawShape(this.currentShape, null, null, this.coordinates);
+      this.coordinates = [];
+    }
+  }
+
+  getDimension() {
+    const input = prompt("Enter radius in meters:", 200);
+    const dimension = parseFloat(input);
+    return isNaN(dimension) ? (alert("Invalid input."), null) : dimension;
   }
 
   setCurrentShape(shapeType) {
     this.currentShape = shapeType;
+    this.coordinates = [];
+    console.log(`${shapeType} selected`);
   }
 
-  drawCircle(lat, lng, radius) {
-    const circle = L.circle([lat, lng], {
-      color: "blue",
-      fillColor: "blue",
-      fillOpacity: 0.5,
-      radius: radius,
-    }).addTo(this.map);
-
-    this.shapes.push({ shape: "circle", lat, lng, obj: circle });
-    circle
-      .bindPopup(
-        `
-            <b>Circle Information</b><br>
-            Coordinates: ${lat.toFixed(4)}, ${lng.toFixed(4)}<br>
-            Radius: ${radius} meters<br>
-            <button onclick="shapeManager.editCircle(${lat}, ${lng})">Edit</button>
-            <button onclick="shapeManager.removeCircle(${lat}, ${lng})">Remove</button>
-        `
-      )
-      .openPopup();
+  drawShape(type, lat, lng, sizeOrCoords) {
+    const shape = this.createShape(type, lat, lng, sizeOrCoords);
+    if (shape) {
+      this.shapes.push({ type, lat, lng, obj: shape });
+      shape
+        .bindPopup(this.getPopupContent(type, lat, lng, sizeOrCoords))
+        .openPopup();
+    }
   }
 
-  drawTriangle(lat, lng, side) {
-    const triangle = L.polygon(
-      [
-        [lat, lng],
-        [lat + side * 0.00018, lng - side * 0.00018],
-        [lat + side * 0.00018, lng + side * 0.00018],
-      ],
-      {
-        color: "red",
-        fillColor: "red",
-        fillOpacity: 0.5,
+  createShape(type, lat, lng, sizeOrCoords) {
+    const options = {
+      color:
+        type === "circle"
+          ? this.circleColor
+          : type === "triangle"
+          ? this.triangleColor
+          : this.rectangleColor,
+    };
+
+    const points = {
+      circle: () => this.createCircle(lat, lng, sizeOrCoords, options),
+      triangle: () => this.createPolygon("triangle", sizeOrCoords, options),
+      rectangle: () => this.createPolygon("rectangle", sizeOrCoords, options),
+    };
+
+    return points[type] ? points[type]() : null;
+  }
+
+  createCircle(lat, lng, radius, options) {
+    const circle = L.circle([lat, lng], { ...options, radius }).addTo(this.map);
+    const centerMarker = L.marker([lat, lng], { draggable: true }).addTo(
+      this.map
+    );
+
+    centerMarker.on("dragend", () =>
+      this.onCircleDragEnd(circle, centerMarker)
+    );
+    return circle;
+  }
+
+  onCircleDragEnd(circle, marker) {
+    const newLatLng = marker.getLatLng();
+    circle.setLatLng(newLatLng);
+    const shape = this.shapes.find((s) => s.obj === circle);
+    if (shape) {
+      shape.lat = newLatLng.lat;
+      shape.lng = newLatLng.lng;
+    }
+  }
+
+  createPolygon(type, coords, options) {
+    const polygon = L.polygon(coords, options).addTo(this.map);
+    const markers = coords.map((coord) => {
+      const marker = L.marker(coord, { draggable: true }).addTo(this.map);
+      marker.on("dragend", () => this.onDragEnd(polygon, markers));
+      return marker;
+    });
+    this.shapes.push({ type, coords, obj: polygon, markers });
+    return polygon;
+  }
+
+  onDragEnd(polygon, markers) {
+    const newCoords = markers.map((marker) => marker.getLatLng());
+    polygon.setLatLngs(newCoords);
+
+    const bounds = L.latLngBounds(newCoords);
+    this.map.fitBounds(bounds);
+
+    const shape = this.shapes.find((s) => s.obj === polygon);
+    if (shape) {
+      shape.coords = newCoords;
+    }
+  }
+
+  calculateZoomLevel(radius) {
+    if (radius <= 500) return 15;
+    if (radius <= 2000) return 12;
+    if (radius <= 5000) return 10;
+    return 8;
+  }
+
+  getPopupContent(type, lat, lng, sizeOrCoords) {
+    if (type === "circle") {
+      return `
+        <b>CIRCLE INFO</b><br>
+        RADIUS: ${sizeOrCoords}m<br>
+        <button onclick="shapeManager.editCircle(${lat}, ${lng})">Edit</button>
+        <button onclick="shapeManager.removeShape('${type}', ${lat}, ${lng})">Remove</button>
+      `;
+    } else {
+      return `
+        <b>${type.toUpperCase()} INFO</b><br>
+        <button onclick="shapeManager.removeShape('${type}', ${lat}, ${lng})">Remove</button>
+      `;
+    }
+  }
+
+  editShape(type, lat, lng) {
+    const shape = this.shapes.find(
+      (s) => s.type === type && s.lat === lat && s.lng === lng
+    );
+
+    if (shape) {
+      if (type === "circle") {
+        const newRadius = parseFloat(
+          prompt("Enter new radius in meters:", shape.obj.getRadius())
+        );
+        if (!isNaN(newRadius)) {
+          shape.obj.setRadius(newRadius);
+          shape.obj
+            .bindPopup(
+              this.getPopupContent(type, shape.lat, shape.lng, newRadius)
+            )
+            .openPopup();
+        }
+      } else {
+        const bounds = L.latLngBounds(shape.coords);
+        this.map.fitBounds(bounds);
+        shape.markers.forEach((marker) => {
+          marker.dragging.enable();
+          marker.on("dragend", () => this.onDragEnd(shape.obj, shape.markers));
+        });
       }
-    ).addTo(this.map);
-
-    this.shapes.push({ shape: "triangle", lat, lng, obj: triangle });
-    triangle
-      .bindPopup(
-        `
-            <b>Triangle Information</b><br>
-            Coordinates: ${lat.toFixed(4)}, ${lng.toFixed(4)}<br>
-            Side Length: ${side} meters<br>
-            <button onclick="shapeManager.editTriangle(${lat}, ${lng})">Edit</button>
-            <button onclick="shapeManager.removeTriangle(${lat}, ${lng})">Remove</button>
-        `
-      )
-      .openPopup();
+    }
   }
 
-  drawRectangle(lat, lng, side) {
-    const rectangle = L.rectangle(
-      [
-        [lat, lng],
-        [lat + side * 0.00018, lng + side * 0.00018],
-      ],
-      {
-        color: "green",
-        fillColor: "green",
-        fillOpacity: 0.5,
-      }
-    ).addTo(this.map);
-
-    this.shapes.push({ shape: "rectangle", lat, lng, obj: rectangle });
-    rectangle
-      .bindPopup(
-        `
-            <b>Rectangle Information</b><br>
-            Coordinates: ${lat.toFixed(4)}, ${lng.toFixed(4)}<br>
-            Side Length: ${side} meters<br>
-            <button onclick="shapeManager.editRectangle(${lat}, ${lng})">Edit</button>
-            <button onclick="shapeManager.removeRectangle(${lat}, ${lng})">Remove</button>
-        `
-      )
-      .openPopup();
-  }
-
-  removeShape(lat, lng, shapeType) {
+  removeShape(type, lat, lng) {
     this.shapes = this.shapes.filter((shape) => {
-      if (shape.shape === shapeType && shape.lat === lat && shape.lng === lng) {
+      if (shape.type === type && shape.lat === lat && shape.lng === lng) {
         this.map.removeLayer(shape.obj);
+        if (shape.markers)
+          shape.markers.forEach((m) => this.map.removeLayer(m));
         return false;
       }
       return true;
     });
   }
-
-  removeCircle(lat, lng) {
-    this.removeShape(lat, lng, "circle");
-  }
-  removeTriangle(lat, lng) {
-    this.removeShape(lat, lng, "triangle");
-  }
-  removeRectangle(lat, lng) {
-    this.removeShape(lat, lng, "rectangle");
-  }
-
-  editCircle(lat, lng) {
-    const newRadius = prompt("Enter new radius (meters):", 200);
-    if (newRadius && !isNaN(newRadius)) {
-      this.shapes.forEach((shape) => {
-        if (
-          shape.shape === "circle" &&
-          shape.lat === lat &&
-          shape.lng === lng
-        ) {
-          shape.obj.setRadius(parseFloat(newRadius));
-          shape.obj.openPopup();
-        }
-      });
-    } else {
-      alert("Invalid radius entered.");
-    }
-  }
-
-  editTriangle(lat, lng) {
-    const newSide = prompt("Enter new side length (meters):", 200);
-    if (newSide && !isNaN(newSide)) {
-      const newTriangle = L.polygon(
-        [
-          [lat, lng],
-          [lat + newSide * 0.00018, lng - newSide * 0.00018],
-          [lat + newSide * 0.00018, lng + newSide * 0.00018],
-        ],
-        {
-          color: "red",
-          fillColor: "red",
-          fillOpacity: 0.5,
-        }
-      ).addTo(this.map);
-
-      this.removeTriangle(lat, lng); // Remove the old triangle
-      this.shapes.push({ shape: "triangle", lat, lng, obj: newTriangle });
-
-      newTriangle
-        .bindPopup(
-          `
-                <b>Triangle Information</b><br>
-                Coordinates: ${lat.toFixed(4)}, ${lng.toFixed(4)}<br>
-                Side Length: ${newSide} meters<br>
-                <button onclick="shapeManager.editTriangle(${lat}, ${lng})">Edit</button>
-                <button onclick="shapeManager.removeTriangle(${lat}, ${lng})">Remove</button>
-            `
-        )
-        .openPopup();
-    } else {
-      alert("Invalid side length entered.");
-    }
-  }
-
-  editRectangle(lat, lng) {
-    const newSide = prompt("Enter new side length (meters):", 200);
-    if (newSide && !isNaN(newSide)) {
-      const newRectangle = L.rectangle(
-        [
-          [lat, lng],
-          [lat + newSide * 0.00018, lng + newSide * 0.00018],
-        ],
-        {
-          color: "green",
-          fillColor: "green",
-          fillOpacity: 0.5,
-        }
-      ).addTo(this.map);
-
-      this.removeRectangle(lat, lng); // Remove the old rectangle
-      this.shapes.push({ shape: "rectangle", lat, lng, obj: newRectangle });
-
-      newRectangle
-        .bindPopup(
-          `
-                <b>Rectangle Information</b><br>
-                Coordinates: ${lat.toFixed(4)}, ${lng.toFixed(4)}<br>
-                Side Length: ${newSide} meters<br>
-                <button onclick="shapeManager.editRectangle(${lat}, ${lng})">Edit</button>
-                <button onclick="shapeManager.removeRectangle(${lat}, ${lng})">Remove</button>
-            `
-        )
-        .openPopup();
-    } else {
-      alert("Invalid side length entered.");
-    }
-  }
 }
 
 // Usage
 const shapeManager = new ShapeManager("map");
-
-// Buttons to select shapes
-document.getElementById("circle-btn").onclick = function () {
+document.getElementById("circle-btn").onclick = () =>
   shapeManager.setCurrentShape("circle");
-  console.log("Circle selected");
-};
-
-document.getElementById("triangle-btn").onclick = function () {
+document.getElementById("triangle-btn").onclick = () =>
   shapeManager.setCurrentShape("triangle");
-  console.log("Triangle selected");
-};
-
-document.getElementById("rectangle-btn").onclick = function () {
+document.getElementById("rectangle-btn").onclick = () =>
   shapeManager.setCurrentShape("rectangle");
-  console.log("Rectangle selected");
-};
