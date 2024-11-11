@@ -159,7 +159,7 @@ class ShapeManager {
       return `
         <b>CIRCLE INFO</b><br>
         RADIUS: ${sizeOrCoords}m<br>
-        <button onclick="shapeManager.editCircle(${lat}, ${lng})">Edit</button>
+        <button onclick="shapeManager.editShape('${type}', ${lat}, ${lng})">Edit</button>
         <button onclick="shapeManager.removeShape('${type}', ${lat}, ${lng})">Remove</button>
       `;
     } else {
@@ -174,14 +174,20 @@ class ShapeManager {
     const shape = this.shapes.find(
       (s) => s.type === type && s.lat === lat && s.lng === lng
     );
-
+  
     if (shape) {
       if (type === "circle") {
         const newRadius = parseFloat(
           prompt("Enter new radius in meters:", shape.obj.getRadius())
         );
         if (!isNaN(newRadius)) {
-          shape.obj.setRadius(newRadius);
+          shape.obj.setRadius(newRadius); // Update the circle's radius
+  
+          // Recalculate the zoom level based on the new radius
+          const zoomLevel = this.calculateZoomLevel(newRadius);
+          this.map.flyTo([lat, lng], zoomLevel); // Fly to the circle's new position with the updated zoom
+  
+          // Update the popup content with the new radius
           shape.obj
             .bindPopup(
               this.getPopupContent(type, shape.lat, shape.lng, newRadius)
@@ -198,6 +204,7 @@ class ShapeManager {
       }
     }
   }
+  
 
   removeShape(type, lat, lng) {
     this.shapes = this.shapes.filter((shape) => {
