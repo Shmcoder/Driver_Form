@@ -12,7 +12,7 @@ This project is designed to streamline the process of adding and managing driver
 
 - **Frontend**: HTML, CSS, JavaScript
 - **Backend**: FastAPI
-- **Database**: MongoDB
+- **Database**: MySql
 
 ## Setup and Installation
 
