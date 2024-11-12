@@ -157,28 +157,30 @@ class ShapeManager {
   }
 
   getPopupContent(type, lat, lng, sizeOrCoords) {
+    const shapeManagerRef = this; // Ensure shapeManager context is preserved
     if (type === "circle") {
       return `
         <b>Circle Information</b><br>
         <b>Radius:</b> ${sizeOrCoords} m<br>
         <b>Location:</b> ${lat.toFixed(4)}, ${lng.toFixed(4)}<br>
-        <button onclick="shapeManager.editShape('${type}', ${lat}, ${lng})">Edit</button>
-        <button onclick="shapeManager.removeShape('${type}', ${lat}, ${lng})">Remove</button>
+        <button onclick="shapeManagerRef.editShape('${type}', ${lat}, ${lng})">Edit</button>
+        <button onclick="shapeManagerRef.removeShape('${type}', ${lat}, ${lng})">Remove</button>
       `;
     } else {
       const shapeType = type.charAt(0).toUpperCase() + type.slice(1); // Capitalize the first letter
       const coordinatesStr = sizeOrCoords
         .map((coord) => `${coord[0].toFixed(4)}, ${coord[1].toFixed(4)}`)
         .join("<br>"); // Dynamically show the coordinates
-
+  
       return `
         <b>${shapeType} Information</b><br>
         <b>Coordinates:</b><br>
         ${coordinatesStr}<br>
-        <button onclick="shapeManager.removeShape('${type}', ${lat}, ${lng})">Remove</button>
+        <button onclick="shapeManagerRef.removeShape('${type}', ${lat}, ${lng})">Remove</button>
       `;
     }
   }
+  
 
   editShape(type, lat, lng) {
     const shape = this.shapes.find(
@@ -222,19 +224,29 @@ class ShapeManager {
 
   removeShape(type, lat, lng) {
     this.shapes = this.shapes.filter((shape) => {
-      if (shape.type === type && shape.lat === lat && shape.lng === lng) {
-        this.map.removeLayer(shape.obj);
-
-        // Remove associated markers
-        if (shape.markers) {
-          shape.markers.forEach((marker) => this.map.removeLayer(marker));
+      if (shape.type === type) {
+        if (type === "circle" && shape.lat === lat && shape.lng === lng) {
+          // Remove circle shape
+          this.map.removeLayer(shape.obj);
+          if (shape.markers) {
+            shape.markers.forEach((marker) => this.map.removeLayer(marker));
+          }
+          return false;
+        } else if (type !== "circle") {
+          // For polygons, check if any coordinates match or the point is within bounds
+          const polygonBounds = shape.obj.getBounds();
+          if (polygonBounds.contains(L.latLng(lat, lng))) {
+            // Remove polygon shape
+            this.map.removeLayer(shape.obj);
+            shape.markers.forEach((marker) => this.map.removeLayer(marker));
+            return false;
+          }
         }
-
-        return false;
       }
-      return true;
+      return true; // Keep the shape in the array
     });
   }
+  
 }
 
 // Usage
