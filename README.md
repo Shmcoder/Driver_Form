@@ -21,10 +21,3 @@ This project is designed to streamline the process of adding and managing driver
    git clone https://github.com/YourUsername/YourRepo.git
    cd YourRepo/add-new-driver
 
-## Setup and Installation
-
-1. **Clone the Repository**:
-   ```bash
-   git clone https://github.com/YourUsername/YourRepo.git
-   cd YourRepo/osm-map
-
